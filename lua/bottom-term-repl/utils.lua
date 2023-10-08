@@ -1,6 +1,9 @@
+local api = vim.api
 local M = {}
 
+
 M.default = {
+  second_separator = '; ',
   delimiters = {
     python = { '#%%', '# %%', '# In\\[\\(\\d\\+\\| \\)\\]:' },
     lua = { '--#' },
@@ -11,10 +14,11 @@ M.default = {
     next_cell = '<Space>jn',
     prev_cell = '<Space>jp',
     restart = '<Space>00',
-    close_xwins = '<Space>x',  -- not implemented yet
+    close_xwins = '<Space>x',
     run_line = '<C-c><C-c>',
     run_cell = '<CR>',
     run_and_jump = '<Space><CR>',
+    toggle_separator = '<Space>s',
     select_session = '<Leader>ss',
     ipy_launch = '<Space>ip',
   },
@@ -26,14 +30,30 @@ M.default = {
 }
 
 
+function M.get_ft_or_compare(another_ft)
+  --- Now this fn usefulness is in doubt.
+  --- Despite its frequent usage in the past.
+  local ft = api.nvim_buf_get_option(0, 'filetype')
+  if another_ft ~= nil then
+    return ft == another_ft
+  end
+  return ft
+end
+
+
 function M.notify(msg, log_lvl_key)
-  local log_lvl_vals = { warning = vim.log.levels.WARN, error = 'error' }
+  local log_lvl_vals = {
+    info = vim.log.levels.INFO,
+    warning = vim.log.levels.WARN,
+    error = 'error',
+  }
   vim.notify(
     ' ' .. msg,
     log_lvl_vals[log_lvl_key],
     { title = 'BottomTerm-Repl' }
   )
 end
+
 
 function shellcmd_capture(cmd)
   local f = assert(io.popen(cmd, 'r'))
@@ -45,6 +65,7 @@ function shellcmd_capture(cmd)
   s = string.gsub(s, '[\n\r]+', ' ')
   return s
 end
+
 
 function M.has_package(check_cmd)
   local cmd = check_cmd .. '; echo $?'

@@ -19,6 +19,8 @@ function M.setup(conf)
   repl.conf = conf -- it is important to pass configs before setting mappings
   vim.keymap.set('n', conf.keys.ipy_launch, repl.start_ipython_session)
   vim.keymap.set('n', conf.keys.select_session, repl.select_session)
+  vim.keymap.set('n', conf.keys.restart, repl.restart_interpreter)
+  vim.keymap.set('n', conf.keys.close_xwins, repl.close_xwins)
 
   vim.keymap.set('n', conf.keys.run_line, repl.copy_line_and_run)
   vim.keymap.set('n', conf.keys.run_cell, repl.run_cell)
@@ -26,6 +28,7 @@ function M.setup(conf)
 
   vim.keymap.set('n', conf.keys.next_cell, repl.jump_to_next_cell())
   vim.keymap.set('n', conf.keys.prev_cell, repl.jump_to_next_cell('b'))
+  vim.keymap.set('n', conf.keys.toggle_separator, repl.toggle_separator)
   vim.keymap.set('n', conf.keys.clear, repl.clear_console)
 
   local aug_btrd = api.nvim_create_augroup(conf.hl_group_prefix, {})

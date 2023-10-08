@@ -9,7 +9,7 @@ local M = {}
 function M.jump_to_next_cell(search_opts)
   search_opts = search_opts or ''
   return function()
-    local ft = api.nvim_buf_get_option(0, 'filetype')
+    local ft = utils.get_ft_or_compare()
     if not vim.tbl_contains(M.conf.valid_buffers, ft) then
       return
     end
@@ -28,18 +28,19 @@ function M.copy_line_and_run()
 end
 
 
-function M.copy_cell(pat)
+function M.copy_cell(pat, sep)
+  if sep == nil then sep = '\n' end
   local top = fn.search(pat, 'bcnW')     -- either <some> or zero (beg)
   local bot = fn.search(pat, 'nW') - 1 -- either <some> - 1 or -1 (end)
-  return table.concat(api.nvim_buf_get_lines(0, top, bot, false), '\n')
+  return table.concat(api.nvim_buf_get_lines(0, top, bot, false), sep)
 end
 
 
 function M.clear_console()
-  if api.nvim_buf_get_option(0, 'filetype') == 'lua' then
-    bt.execute('os.execute("clear")')
+  if bt._ephemeral.launched_by 'lua' then
+    bt.execute 'os.execute("clear")'
   else
-    bt.execute('clear')
+    bt.execute 'clear'
   end
 end
 
@@ -47,7 +48,7 @@ end
 function M.ipython_run_cell(pat)
   fn.setreg('l', fn.getreg('+'))
   fn.setreg('+', M.copy_cell(pat))
-  bt.execute('%paste -q')
+  bt.execute '%paste -q'
 
   --- Restore the original content of the clipboard in 500ms.
   --- This should be enough to paste the new one to IPython's cmdline.
@@ -59,15 +60,17 @@ end
 
 
 function M.run_cell()
-  local ft = api.nvim_buf_get_option(0, 'filetype')
-  if not vim.tbl_contains(M.conf.valid_buffers, ft) then
+  if not bt._ephemeral.ss_exists then
     return
   end
 
-  if ft == 'python' then
-    M.ipython_run_cell(M.conf.pats.python)
+  local ft = utils.get_ft_or_compare()
+  if bt._ephemeral.launched_by 'ipython' then
+    --- Here we actually allow also to run python code from
+    --- non-python buffer (by passing filetype of the current buffer).
+    M.ipython_run_cell(M.conf.pats[ft] or M.conf.pats.python)
   else -- run cell line by line
-    bt.execute(M.copy_cell(M.conf.pats[ft]))
+    bt.execute(M.copy_cell(M.conf.pats[ft], M._current_sep))
   end
 end
 
@@ -75,6 +78,54 @@ end
 function M.run_and_jump()
   M.run_cell()
   M.jump_to_next_cell()()
+end
+
+
+function M.toggle_separator()
+  if M._current_sep == nil then
+    M._current_sep = M.conf.second_separator
+  else
+    M._current_sep = nil
+  end
+
+  local log_lvl = 'info'
+  local suffix = ''
+
+  if bt._ephemeral.launched_by 'ipython' then
+    log_lvl = 'warning'
+    suffix = "\n However, it has no effect on IPython REPL"
+  end
+
+  utils.notify(
+    'Line separator has been changed to '
+    .. "'" .. (M._current_sep or '\\n') .. "'" .. suffix, log_lvl)
+end
+
+
+function M.restart_interpreter()
+  if not bt._ephemeral.has_parent then
+    utils.notify('There is no parent process!\n Calling `restart` fn '
+      .. 'in this case\n would lead to closing the terminal window')
+    return
+  end
+
+  local exit
+  if bt._ephemeral.launched_by 'lua' then
+    exit = 'os.exit()'
+  else
+    exit = 'exit'
+  end
+
+  bt.execute(exit)
+  --- Repeat the launch command after a small delay.
+  vim.defer_fn(function () bt.execute '!!' end, 50)
+end
+
+
+function M.close_xwins()
+  if bt._ephemeral.launched_by 'ipython' then
+    bt.execute 'try: plt.close("all")\nexcept: pass'
+  end
 end
 
 
@@ -89,6 +140,10 @@ local function start_repl_session (cmd)
   end
 
   bt._ephemeral.ss_exists = true
+  bt._ephemeral.has_parent = cmd ~= '' and cmd:match '%s*exec%s' == nil
+  bt._ephemeral.launched_by = function (val)
+    return cmd:match('%s*' .. val .. '%s*') ~= nil
+  end
 end
 
 
