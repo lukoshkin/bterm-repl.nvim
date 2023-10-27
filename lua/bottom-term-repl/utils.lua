@@ -3,6 +3,7 @@ local M = {}
 
 
 M.default = {
+  clipboard_occupation_time = 200,
   second_separator = '; ',
   delimiters = {
     python = { '#%%', '# %%', '# In\\[\\(\\d\\+\\| \\)\\]:' },

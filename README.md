@@ -7,7 +7,7 @@ in `BottomTerm` instance. This REPL-like extension aims to bridge this gap.
 
 ## Features
 
-* Written in pure Lua<br>(Ok, Neovim + Lua :))
+* Written in pure Lua<br>(Ok, Neovim + Lua 🙃)
 
 * Easy access to interpreter windows.  
   Open IPython, bash/zsh, or lua in a `BottomTerm` instance with just a keymap.
@@ -81,6 +81,7 @@ use {
     requires = 'lukoshkin/bterm.nvim',
     config = function ()
       require'bottom-term-repl'.setup {
+        clipboard_occupation_time = 500,
         second_separator = '; ',
         delimiters = {
           python = { '#%%', '# %%', '# In\\[\\(\\d\\+\\| \\)\\]:' },
@@ -109,12 +110,15 @@ use {
   end
 }
 ```
+`clipboard_occupation_time` - time after which the content of the clipboard
+will be restored.<br>If it is too short, the restored content will be sent to
+IPython instead.
 
 
 ## Further Development
 
 - [x] Add base functionality.
-- [ ] Allow configuration via options.
+- [ ] Add more options for finer configuration.
 - [x] Add line separator toggle (whether to join lines with '\n' or ';').
 - [ ] Add demos: working in IPython; different filetypes; highlighting;
       toggling the separator.
