@@ -1,9 +1,11 @@
-local bt = require'bottom-term.core'
-local utils = require'bottom-term-repl.utils'
+local bt = require 'bottom-term.core'
+local utils = require 'bottom-term-repl.utils'
 
 local api = vim.api
 local fn = vim.fn
+
 local M = {}
+M._current_sep_id = 1
 
 
 function M.jump_to_next_cell(search_opts)
@@ -30,9 +32,26 @@ end
 
 function M.copy_cell(pat, sep)
   if sep == nil then sep = '\n' end
-  local top = fn.search(pat, 'bcnW')     -- either <some> or zero (beg)
+  local top = fn.search(pat, 'bcnW')   -- either <some> or zero (beg)
   local bot = fn.search(pat, 'nW') - 1 -- either <some> - 1 or -1 (end)
-  return table.concat(api.nvim_buf_get_lines(0, top, bot, false), sep)
+  local lines = api.nvim_buf_get_lines(0, top, bot, false)
+  lines = vim.tbl_filter(function(line)
+    return line:match "^%s*$" == nil
+  end, lines)
+  return table.concat(lines, sep)
+end
+
+
+local function round_trip(fn_to_call)
+  local bak_wid = api.nvim_get_current_win()
+  api.nvim_set_current_win(fn.bufwinid(vim.t.bottom_term_name))
+
+  fn_to_call()
+
+  vim.defer_fn(function()
+    api.nvim_set_current_win(bak_wid)
+  end, 10) -- one can experiment with the delay value:
+  --- even 5ms seems to be enough.
 end
 
 
@@ -42,19 +61,34 @@ function M.clear_console()
   end
 
   local tnr = api.nvim_get_current_tabpage()
+  local cmd = 'clear'
+
   if bt._ephemeral[tnr].ss_exists
-    and bt._ephemeral[tnr].launched_by 'lua' then
-    bt.execute 'os.execute("clear")'
-  else
-    bt.execute 'clear'
+      and bt._ephemeral[tnr].launched_by 'lua' then
+    cmd = 'os.execute("clear")'
   end
+
+  round_trip(function()
+    bt.execute(cmd)
+  end)
 end
 
 
 function M.ipython_run_cell(pat)
+  if M._current_sep_id ~= 1 then
+    local sep = M.conf.line_separators[M._current_sep_id]
+    bt.execute('' .. M.copy_cell(pat, sep))
+
+    round_trip(function()
+      local keys = api.nvim_replace_termcodes('<CR>', true, true, true)
+      api.nvim_feedkeys(keys, "n", false)
+    end)
+    return
+  end
+
   fn.setreg('l', fn.getreg('+'))
   fn.setreg('+', M.copy_cell(pat))
-  bt.execute '%paste -q'
+  bt.execute '%paste -q'
 
   --- Restore the original content of the clipboard in a number of ms specified
   --- by `M.clipboard_occupation_time`. 500ms should be enough to paste the new
@@ -77,10 +111,12 @@ function M.run_cell()
   local ft = utils.get_ft_or_compare()
   if bt._ephemeral[tnr].launched_by 'ipython' then
     --- Here we actually allow also to run python code from
-    --- non-python buffer (by passing filetype of the current buffer).
+    --- non-python buffer (by passing filetype of the current buffer
+    --- and not just hardcoding it as 'python').
     M.ipython_run_cell(M.conf.pats[ft] or M.conf.pats.python)
   else -- run cell line by line
-    bt.execute(M.copy_cell(M.conf.pats[ft], M._current_sep))
+    local sep = M.conf.line_separators[M._current_sep_id]
+    bt.execute(M.copy_cell(M.conf.pats[ft], sep))
   end
 end
 
@@ -95,25 +131,32 @@ function M.run_and_jump()
 end
 
 
-function M.toggle_separator()
-  if M._current_sep == nil then
-    M._current_sep = M.conf.second_separator
-  else
-    M._current_sep = nil
+function M.toggle_separator(forward, backward)
+  forward = forward or 1
+  assert(forward == 1, '`forward` (the first arg) should always be 1')
+
+  backward = backward or 0
+  assert(vim.tbl_contains({ 0, 2 }, backward),
+    '`backward` (the second arg) can be either 0 or 2')
+
+  if not bt._ephemeral[api.nvim_get_current_tabpage()] then
+    return
+  end
+
+  M._current_sep_id = (
+    M._current_sep_id - backward
+  ) % #M.conf.line_separators + forward
+
+  local sep = M.conf.line_separators[M._current_sep_id] or '\n'
+  if M._current_sep_id ~= 1 and sep == '\n' then
+    sep = sep .. ' (Vim -> Docker:IPython)'
   end
 
   local log_lvl = 'info'
-  local suffix = ''
-
-  local tnr = api.nvim_get_current_tabpage()
-  if bt._ephemeral[tnr].launched_by 'ipython' then
-    log_lvl = 'warning'
-    suffix = "\n However, it has no effect on IPython REPL"
-  end
-
   utils.notify(
-    'Line separator has been changed to '
-    .. "'" .. (M._current_sep or '\\n') .. "'" .. suffix, log_lvl)
+    'Line separator has been changed to ' .. "'" .. fn.substitute(
+      sep, '\n', '<NL>', 'g') .. "'", log_lvl
+  )
 end
 
 
@@ -135,7 +178,7 @@ function M.restart_interpreter()
 
   bt.execute(exit)
   --- Repeat the launch command after a small delay.
-  vim.defer_fn(function () bt.execute '!!' end, 50)
+  vim.defer_fn(function() bt.execute '!!' end, 50)
 end
 
 
@@ -143,14 +186,14 @@ function M.close_xwins()
   local tnr = api.nvim_get_current_tabpage()
 
   if bt._ephemeral[tnr] ~= nil
-    and bt._ephemeral[tnr].ss_exists
-    and bt._ephemeral[tnr].launched_by 'ipython' then
+      and bt._ephemeral[tnr].ss_exists
+      and bt._ephemeral[tnr].launched_by 'ipython' then
     bt.execute 'try: plt.close("all")\nexcept: pass'
   end
 end
 
 
-local function start_repl_session (cmd)
+local function start_repl_session(cmd)
   if not bt.is_visible() then
     bt.toggle()
   end
@@ -164,13 +207,13 @@ local function start_repl_session (cmd)
 
   bt._ephemeral[tnr].ss_exists = true
   bt._ephemeral[tnr].has_parent = cmd ~= '' and cmd:match '%s*exec%s' == nil
-  bt._ephemeral[tnr].launched_by = function (val)
+  bt._ephemeral[tnr].launched_by = function(val)
     return cmd:match('%s*' .. val .. '%s*') ~= nil
   end
 end
 
 
-function M.select_session ()
+function M.select_session()
   local tnr = api.nvim_get_current_tabpage()
   if bt._ephemeral[tnr] and bt._ephemeral[tnr].ss_exists then
     if bt._ephemeral[tnr].ips_exists then
@@ -198,7 +241,7 @@ function M.select_session ()
 end
 
 
-function M.start_ipython_session ()
+function M.start_ipython_session()
   local tnr = api.nvim_get_current_tabpage()
 
   if bt._ephemeral[tnr] and bt._ephemeral[tnr].ss_exists then

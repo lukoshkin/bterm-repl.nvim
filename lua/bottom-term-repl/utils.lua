@@ -3,9 +3,9 @@ local M = {}
 
 
 M.default = {
-  clipboard_occupation_time = 200,
-  second_separator = '; ',
-  delimiters = {
+  clipboard_occupation_time = 500,
+  line_separators = { nil, '; \\\n', '; ', '\n' },
+  cell_delimiters = {
     python = { '#%%', '# %%', '# In\\[\\(\\d\\+\\| \\)\\]:' },
     lua = { '--#' },
     sh = { '#%%' },
@@ -20,6 +20,7 @@ M.default = {
     run_cell = '<CR>',
     run_and_jump = '<Space><CR>',
     toggle_separator = '<Space>s',
+    toggle_separator_backward = '<Space>S',
     select_session = '<Leader>ss',
     ipy_launch = '<Space>ip',
   },

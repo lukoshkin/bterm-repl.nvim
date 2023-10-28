@@ -20,15 +20,17 @@ in `BottomTerm` instance. This REPL-like extension aims to bridge this gap.
   By default, they are `--#` and `#%%` for `'lua'` and `'python'` and `'sh'`
   buffers, respectively.<br>Quick navigation is possible using key mappings.
 
-* Set second separator to alter the way how copied lines are concatenated.  
-  Swiftly switch between '\n' and your custom separator.
+* Set the line separator to alter the way how copied lines are concatenated.  
+  Swiftly switch between '\n' and your custom separators.
 
 * Highlight cell separators with customizable colors.  
   One can specify color per `filetype`.
 
 * Unlike "[vim-ipython](https://github.com/hanschen/vim-ipython-cell)
   \+ [vim-slime](https://github.com/jpalardy/vim-slime)" plugins combo,
-  `bterm-repl` preserves<br>the content of the clipboard when sending code for execution.
+  `bterm-repl` preserves<br>the content of the clipboard when sending code
+  for the execution. Moreover, you<br>can send code from host to a docker
+  container by properly choosing the line separator.
 
 ## Installation
 
@@ -82,8 +84,8 @@ use {
     config = function ()
       require'bottom-term-repl'.setup {
         clipboard_occupation_time = 500,
-        second_separator = '; ',
-        delimiters = {
+        line_separators = { nil, '; \\\n', '; ', '\n' },
+        cell_delimiters = {
           python = { '#%%', '# %%', '# In\\[\\(\\d\\+\\| \\)\\]:' },
           lua = { '--#' },
           sh = { '#%%' },
@@ -98,6 +100,7 @@ use {
           run_cell = '<CR>',
           run_and_jump = '<Space><CR>',
           toggle_separator = '<Space>s',
+          toggle_separator_backward = '<Space>S',
           select_session = '<Leader>ss',
           ipy_launch = '<Space>ip',
         },
@@ -111,8 +114,10 @@ use {
 }
 ```
 `clipboard_occupation_time` - time after which the content of the clipboard
-will be restored.<br>If it is too short, the restored content will be sent to
-IPython instead.
+will be restored. If it is too short, the restored content will be sent to
+IPython instead. Note that it is only valid for IPython and when the line
+separator is set to `nil` (what is equivalent to `'\n'` in terms of the
+implementation).
 
 
 ## Further Development
