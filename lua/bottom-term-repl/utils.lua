@@ -4,7 +4,7 @@ local M = {}
 
 M.default = {
   clipboard_occupation_time = 500,
-  line_separators = { nil, '; \\\n', '; ', '\n' },
+  line_separators = { nil, '; \\\n', '; ', '' },
   cell_delimiters = {
     python = { '#%%', '# %%', '# In\\[\\(\\d\\+\\| \\)\\]:' },
     lua = { '--#' },
@@ -57,6 +57,7 @@ function M.notify(msg, log_lvl_key)
 end
 
 
+-- FIXME: this checks conditions on the host
 function shellcmd_capture(cmd)
   local f = assert(io.popen(cmd, 'r'))
   local s = assert(f:read('*a'))

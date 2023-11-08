@@ -84,7 +84,7 @@ use {
     config = function ()
       require'bottom-term-repl'.setup {
         clipboard_occupation_time = 500,
-        line_separators = { nil, '; \\\n', '; ', '\n' },
+        line_separators = { nil, '; \\\n', '; ', '' },
         cell_delimiters = {
           python = { '#%%', '# %%', '# In\\[\\(\\d\\+\\| \\)\\]:' },
           lua = { '--#' },

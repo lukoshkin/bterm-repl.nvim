@@ -1,4 +1,5 @@
 local bt = require 'bottom-term.core'
+local bt_utils = require 'bottom-term.utils'
 local utils = require 'bottom-term-repl.utils'
 
 local api = vim.api
@@ -43,6 +44,7 @@ end
 
 
 local function round_trip(fn_to_call)
+  --- In the previous patch, it was also used in `ipython_run_cell`.
   local bak_wid = api.nvim_get_current_win()
   api.nvim_set_current_win(fn.bufwinid(vim.t.bottom_term_name))
 
@@ -77,12 +79,15 @@ end
 function M.ipython_run_cell(pat)
   if M._current_sep_id ~= 1 then
     local sep = M.conf.line_separators[M._current_sep_id]
-    bt.execute('' .. M.copy_cell(pat, sep))
-
-    round_trip(function()
-      local keys = api.nvim_replace_termcodes('<CR>', true, true, true)
-      api.nvim_feedkeys(keys, "n", false)
-    end)
+    --- Because of '^C' I can't add a condition in `run_cell` readily,
+    --- so that this special case would go into the `else` branch.
+    --- '^C' is to discard any input
+    bt.execute('' .. M.copy_cell(pat, sep) .. '\n')
+    --- Sep in this case should be '', where:
+    --- '^O' - add a new line below,
+    --- '^A' - go to the current line beginning,
+    --- '^N' - go to the line below.
+    --- Otherwise, the tab indentation will be broken.
     return
   end
 
@@ -102,9 +107,13 @@ end
 
 function M.run_cell()
   local tnr = api.nvim_get_current_tabpage()
-  if not bt.is_visible() or not bt._ephemeral[tnr].ss_exists then
-    --- Either bottom term is not visible
-    --- or `start_repl_session` was never called.
+  if not bt.is_visible()
+      or not bt._ephemeral[tnr].ss_exists
+      or bt_utils.is_buftype_terminal() then
+    --- Quit early if one of the following is true:
+    --- `bottom_term` is not visible;
+    --- `start_repl_session` was never called;
+    --- "code" is sent from terminal buffer.
     return
   end
 
@@ -122,7 +131,7 @@ end
 
 
 function M.run_and_jump()
-  --- NOTE: not sure but may help when calling it two times
+  --- NOTE: not sure but may help when calling it multiple times
   --- within a short time interval.
   vim.schedule(function()
     M.run_cell()
@@ -232,12 +241,38 @@ function M.select_session()
     { prompt = 'Select interpreter [' .. shell .. '] ' },
     function(cmd)
       if cmd ~= nil then
-        start_repl_session(cmd)
+        start_repl_session(cmd .. ' && exit')
       end
     end
   )
   api.nvim_set_current_win(caller_wid)
   vim.cmd 'stopinsert'
+end
+
+
+--- Unfortunately, we have to use these crutches (like `cmd + ' && exit'`)
+--- for now (since there is no way of communicating back with the current
+--- implementation of 'bterm.nvim'). However, it will be fixed in the next
+--- patches. #TODO
+local function call_from_scratch_checks()
+  local check = "command -v ipython | grep -q 'ipython'"
+
+  if not utils.has_package(check) then
+    utils.notify('IPython is not installed! Aborting..', 'error')
+    return ""
+  end
+
+  check = 'pip3 --disable-pip-version-check list 2>&1'
+  check = check .. [[ | grep -qP 'matplotlib(?!-inline)' ]]
+
+  local cmd = 'ipython'
+  if utils.has_package(check) then
+    cmd = cmd .. ' --matplotlib'
+  else
+    utils.notify('Matplotlib is not installed.', 'warning')
+  end
+
+  return cmd
 end
 
 
@@ -253,22 +288,22 @@ function M.start_ipython_session()
     end
   end
 
+  --- Should be before `start_repl_session` call.
   local caller_wid = api.nvim_get_current_win()
-  local check = "command -v ipython | grep -q 'ipython'"
+  local cmd
 
-  if not utils.has_package(check) then
-    utils.notify('IPython is not installed! Aborting..', 'error')
-    return
+  if bt._ephemeral[tnr] == nil then
+    cmd = call_from_scratch_checks()
+    cmd = cmd .. ' && exit'
+  else
+    cmd = "command -v ipython && { ipython && exit; } || { echo;"
+    cmd = cmd .. " echo Either IPython is not installed or"
+    cmd = cmd .. " there are problems with running it; exit; exit; }"
+    --- Two exits in a row are enough for base case scenarios.
   end
 
-  check = 'pip3 --disable-pip-version-check list 2>&1'
-  check = check .. [[ | grep -qP 'matplotlib(?!-inline)' ]]
-
-  local cmd = 'ipython'
-  if utils.has_package(check) then
-    cmd = cmd .. ' --matplotlib'
-  else
-    utils.notify('Matplotlib is not installed.', 'warning')
+  if cmd == "" then
+    return
   end
 
   start_repl_session(cmd)
