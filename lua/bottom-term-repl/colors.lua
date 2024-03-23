@@ -1,10 +1,9 @@
-local repl = require 'bottom-term-repl.core'
+local repl = require "bottom-term-repl.core"
 local hl_gn = repl.conf.hl_group_prefix
 
 local api = vim.api
 local fn = vim.fn
 local M = {}
-
 
 local function clear_delim_match()
   if vim.w.repl_delim_match then
@@ -14,7 +13,7 @@ local function clear_delim_match()
 end
 
 function M.match_delims()
-  local ft = api.nvim_buf_get_option(0, 'filetype')
+  local ft = api.nvim_buf_get_option(0, "filetype")
 
   if vim.tbl_contains(repl.conf.valid_buffers, ft) then
     if ft ~= M.prev_ft then
