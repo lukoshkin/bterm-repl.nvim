@@ -1,14 +1,26 @@
 local repl = require "bottom-term-repl.core"
-local hl_gn = repl.conf.hl_group_prefix
 
 local api = vim.api
 local fn = vim.fn
 local M = {}
 
+local function is_in_match_groups(name)
+  local match_groups = vim.tbl_map(function(l)
+    return l.group
+  end, fn.getmatches())
+  return vim.tbl_contains(match_groups, name)
+end
+
 local function clear_delim_match()
-  if vim.w.repl_delim_match then
-    fn.matchdelete(vim.w.repl_delim_match)
-    vim.w.repl_delim_match = nil
+  if not vim.w.repl_delim_match then
+    return
+  end
+
+  for hl_gn, mid in pairs(vim.w.repl_delim_match) do
+    if is_in_match_groups(hl_gn) then
+      fn.matchdelete(mid)
+      vim.w.repl_delim_match = nil
+    end
   end
 end
 
@@ -21,8 +33,10 @@ function M.match_delims()
     end
 
     if vim.w.repl_delim_match == nil then
-      vim.w.repl_delim_match = fn.matchadd(hl_gn .. ft, repl.conf.pats[ft])
-      api.nvim_set_hl(0, hl_gn .. ft, repl.conf.colors[ft])
+      local hl_gn = repl.conf.hl_group_prefix .. ft
+      local mid = fn.matchadd(hl_gn, repl.conf.pats[ft])
+      api.nvim_set_hl(0, hl_gn, repl.conf.colors[ft])
+      vim.w.repl_delim_match = { hl_gn = mid }
     end
 
     M.prev_ft = ft

@@ -47,12 +47,14 @@ local function round_trip(fn_to_call)
   --- In the previous patch, it was also used in `ipython_run_cell`.
   local bak_wid = api.nvim_get_current_win()
   api.nvim_set_current_win(fn.bufwinid(vim.t.bottom_term_name))
+  vim.cmd "startinsert" -- to gain the focus
 
-  fn_to_call()
+  pcall(fn_to_call)
 
   vim.defer_fn(function()
+    vim.cmd "stopinsert"
     api.nvim_set_current_win(bak_wid)
-  end, 10) -- one can experiment with the delay value:
+  end, M.conf.gain_focus_time) -- one can experiment with the delay value:
   --- even 5ms seems to be enough.
 end
 
@@ -169,8 +171,13 @@ function M.toggle_separator(forward, backward)
 end
 
 function M.restart_interpreter()
+  if not bt.is_visible() then
+    return
+  end
+
   local tnr = api.nvim_get_current_tabpage()
   local was_horizontal = vim.t.bottom_term_horizontal
+  local caller_wid = api.nvim_get_current_win()
   local session_attrs = bt._ephemeral[tnr]
 
   bt.terminate()
@@ -179,6 +186,9 @@ function M.restart_interpreter()
 
   if not was_horizontal and vim.t.bottom_term_horizontal then
     bt.reverse_orientation()
+  end
+  if api.nvim_win_is_valid(caller_wid) then
+    api.nvim_set_current_win(caller_wid)
   end
 end
 

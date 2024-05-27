@@ -3,6 +3,7 @@ local M = {}
 
 M.default = {
   clipboard_occupation_time = 500,
+  gain_focus_time = 10,
   line_separators = { nil, "; \\\n", "; ", "" },
   cell_delimiters = {
     python = { "#%%", "# %%", "# In\\[\\(\\d\\+\\| \\)\\]:" },
